@@ -1,0 +1,20 @@
+const express = require('express');
+const router = express.Router();
+const Acharya = require('../models/Acharya');
+
+router.get('/', async (req, res) => {
+  try {
+    const items = await Acharya.find().sort({ order: 1 });
+    res.json(items);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const item = await Acharya.findById(req.params.id);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    res.json(item);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+module.exports = router;
