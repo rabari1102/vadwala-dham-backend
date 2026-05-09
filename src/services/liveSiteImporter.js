@@ -183,13 +183,27 @@ async function downloadMedia(media, index) {
 
 async function downloadLiveSiteMedia() {
   const { mediaSources } = await scrapePages();
-  const downloaded = [];
+  return downloadMediaBatch(mediaSources);
+}
 
-  for (let i = 0; i < mediaSources.length; i += 1) {
-    downloaded.push(await downloadMedia(mediaSources[i], i));
+async function downloadMediaBatch(mediaSources) {
+  const concurrency = 6;
+  const downloaded = new Array(mediaSources.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < mediaSources.length) {
+      const index = cursor;
+      cursor += 1;
+      downloaded[index] = await downloadMedia(mediaSources[index], index);
+    }
   }
 
-  return downloaded;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, mediaSources.length) }, worker),
+  );
+
+  return downloaded.filter(Boolean);
 }
 
 function localizePageImages(pages, mediaBySourceUrl) {
@@ -222,15 +236,15 @@ async function importLiveSiteContent(options = {}) {
   const scraped = await scrapePages();
   const downloaded = [];
 
-  for (let i = 0; i < scraped.mediaSources.length; i += 1) {
+  if (downloadImages) {
+    downloaded.push(...(await downloadMediaBatch(scraped.mediaSources)));
+  } else {
     downloaded.push(
-      downloadImages
-        ? await downloadMedia(scraped.mediaSources[i], i)
-        : {
-            ...scraped.mediaSources[i],
-            localUrl: scraped.mediaSources[i].url,
-            fileName: path.basename(new URL(scraped.mediaSources[i].url).pathname),
-          },
+      ...scraped.mediaSources.map((item) => ({
+        ...item,
+        localUrl: item.url,
+        fileName: path.basename(new URL(item.url).pathname),
+      })),
     );
   }
 
