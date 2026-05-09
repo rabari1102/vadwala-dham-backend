@@ -6,21 +6,33 @@ const morgan = require('morgan');
 
 const app = express();
 
-// CORS
-const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',')
-  : ['http://localhost:5173', 'http://localhost:3000'];
-
+// ── CORS ─────────────────────────────────────────────────────────────────────
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-      cb(null, true);
-    } else {
-      cb(new Error('Not allowed by CORS'));
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return cb(null, true);
+
+    // Allow all Vercel preview & production deployments
+    if (origin.endsWith('.vercel.app')) return cb(null, true);
+
+    // Allow custom production domain
+    if (origin === 'https://dudhrejvadwala.com') return cb(null, true);
+    if (origin === 'https://www.dudhrejvadwala.com') return cb(null, true);
+
+    // Allow localhost for local development
+    if (origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1')) {
+      return cb(null, true);
     }
+
+    // Allow any extra origins defined in env (comma-separated)
+    const extras = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',').map(s => s.trim()) : [];
+    if (extras.includes(origin)) return cb(null, true);
+
+    cb(new Error('CORS: origin not allowed - ' + origin));
   },
   credentials: true,
 }));
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -68,8 +80,6 @@ app.get('/api/health', (_, res) => res.json({ status: 'ok', timestamp: new Date(
 app.get('/', (_, res) => res.json({ message: 'Vadwala Dham API is running', version: '1.0.0' }));
 
 // ── SEED ENDPOINT ──────────────────────────────────────────────────────────────
-// GET /api/seed?secret=YOUR_SEED_SECRET  →  populates DB with initial data
-// Remove or disable after first use!
 app.get('/api/seed', async (req, res) => {
   const secret = process.env.SEED_SECRET || 'vadwala2025';
   if (req.query.secret !== secret) {
