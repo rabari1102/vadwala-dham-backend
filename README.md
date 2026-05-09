@@ -34,6 +34,14 @@ After deploying, run the seed script locally pointing to your Atlas DB:
 MONGODB_URI="your-atlas-uri" npm run seed
 ```
 
+The seed script imports the current Dudhrej Vadwala website content and mirrors source photos into `public/uploads/live-site`.
+
+To download only the photos without touching the database:
+
+```bash
+npm run assets:live
+```
+
 ## 📡 API Endpoints
 
 | Method | Endpoint | Description |
@@ -50,9 +58,27 @@ MONGODB_URI="your-atlas-uri" npm run seed
 | GET | `/api/donation` | Donation info |
 | GET | `/api/contact` | Contact info |
 | GET | `/api/content` | All site content |
+| GET | `/api/pages` | Published dynamic pages |
+| GET | `/api/pages/:slug` | Published dynamic page by slug |
+| GET | `/api/media` | Active local media assets |
 | POST | `/api/contact/message` | Submit contact form |
 | POST | `/api/admin/login` | Admin login |
 | POST/PUT/DELETE | `/api/admin/*` | Admin CRUD (JWT required) |
+
+## Admin Dynamic Content
+
+Admin JWT routes support full CRUD for dynamic pages and locally stored images:
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET/POST | `/api/admin/pages` | List or create pages |
+| PUT/DELETE | `/api/admin/pages/:id` | Update or delete a page |
+| GET/POST | `/api/admin/media` | List or create media records |
+| POST | `/api/admin/media/upload` | Upload an image file as `image` |
+| PUT/DELETE | `/api/admin/media/:id` | Update or delete media |
+| POST | `/api/admin/import-live-site` | Import Dudhrej Vadwala live site content/photos into DB |
+
+Uploaded and imported images are served from `/uploads/...`.
 
 ## 🔧 Local Development
 

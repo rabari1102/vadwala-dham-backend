@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 const { Types } = require('mongoose');
 const rateLimit = require('express-rate-limit');
 const auth = require('../middleware/auth');
@@ -18,6 +21,9 @@ const About = require('../models/About');
 const Acharya = require('../models/Acharya');
 const DhajaChadava = require('../models/DhajaChadava');
 const Contact = require('../models/Contact');
+const Page = require('../models/Page');
+const MediaAsset = require('../models/MediaAsset');
+const { importLiveSiteContent } = require('../services/liveSiteImporter');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const SECRET = JWT_SECRET || 'vadwala_dham_dev_secret_key';
@@ -28,6 +34,31 @@ const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { e
 const adminLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, message: { error: 'Too many requests.' }, standardHeaders: true, legacyHeaders: false });
 
 function isValidObjectId(id) { return Types.ObjectId.isValid(id); }
+
+const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'admin');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = path
+      .basename(file.originalname, ext)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '') || 'media';
+    cb(null, `${Date.now()}-${base}${ext.toLowerCase()}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Only image uploads are allowed'));
+    cb(null, true);
+  },
+});
 
 // POST /api/admin/login
 router.post('/login', loginLimiter, async (req, res) => {
@@ -97,5 +128,32 @@ router.put('/content/:key', adminLimiter, auth, async (req, res) => { try { cons
 router.get('/contact-messages', adminLimiter, auth, async (req, res) => { try { const messages = await ContactMessage.find().sort({ createdAt: -1 }); res.json(messages); } catch (e) { res.status(500).json({ error: e.message }); } });
 router.patch('/contact-messages/:id/read', adminLimiter, auth, async (req, res) => { if (!isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid ID' }); try { const msg = await ContactMessage.findByIdAndUpdate(req.params.id, { isRead: true }, { new: true }); res.json(msg); } catch (e) { res.status(400).json({ error: e.message }); } });
 router.delete('/contact-messages/:id', adminLimiter, auth, async (req, res) => { if (!isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid ID' }); try { await ContactMessage.findByIdAndDelete(req.params.id); res.json({ success: true }); } catch (e) { res.status(400).json({ error: e.message }); } });
+
+// PAGES
+router.get('/pages', adminLimiter, auth, async (_req, res) => { try { const pages = await Page.find().sort({ order: 1, createdAt: 1 }); res.json(pages); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post('/pages', adminLimiter, auth, async (req, res) => { try { const page = new Page(req.body); await page.save(); res.status(201).json(page); } catch (e) { res.status(400).json({ error: e.message }); } });
+router.put('/pages/:id', adminLimiter, auth, async (req, res) => { if (!isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid ID' }); try { const page = await Page.findByIdAndUpdate(req.params.id, req.body, { new: true }); if (!page) return res.status(404).json({ error: 'Not found' }); res.json(page); } catch (e) { res.status(400).json({ error: e.message }); } });
+router.delete('/pages/:id', adminLimiter, auth, async (req, res) => { if (!isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid ID' }); try { await Page.findByIdAndDelete(req.params.id); res.json({ success: true }); } catch (e) { res.status(400).json({ error: e.message }); } });
+
+// MEDIA
+router.get('/media', adminLimiter, auth, async (req, res) => { try { const filter = {}; if (req.query.category) filter.category = req.query.category; const media = await MediaAsset.find(filter).sort({ order: 1, createdAt: -1 }); res.json(media); } catch (e) { res.status(500).json({ error: e.message }); } });
+router.post('/media', adminLimiter, auth, async (req, res) => { try { const item = new MediaAsset(req.body); await item.save(); res.status(201).json(item); } catch (e) { res.status(400).json({ error: e.message }); } });
+router.post('/media/upload', adminLimiter, auth, upload.single('image'), async (req, res) => { try { if (!req.file) return res.status(400).json({ error: 'Image file is required' }); const item = await MediaAsset.create({ title: req.body.title || req.file.originalname, alt: req.body.alt || req.body.title || req.file.originalname, localUrl: `/uploads/admin/${req.file.filename}`, fileName: req.file.filename, mimeType: req.file.mimetype, size: req.file.size, category: req.body.category || 'general', order: Number(req.body.order) || 0, isActive: req.body.isActive !== 'false' }); res.status(201).json(item); } catch (e) { res.status(400).json({ error: e.message }); } });
+router.put('/media/:id', adminLimiter, auth, async (req, res) => { if (!isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid ID' }); try { const item = await MediaAsset.findByIdAndUpdate(req.params.id, req.body, { new: true }); if (!item) return res.status(404).json({ error: 'Not found' }); res.json(item); } catch (e) { res.status(400).json({ error: e.message }); } });
+router.delete('/media/:id', adminLimiter, auth, async (req, res) => { if (!isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid ID' }); try { await MediaAsset.findByIdAndDelete(req.params.id); res.json({ success: true }); } catch (e) { res.status(400).json({ error: e.message }); } });
+
+// LIVE SITE IMPORT
+router.post('/import-live-site', adminLimiter, auth, async (req, res) => {
+  try {
+    const result = await importLiveSiteContent({
+      baseUrl: `${req.protocol}://${req.get('host')}`,
+      downloadImages: req.body.downloadImages !== false,
+      reset: req.body.reset !== false,
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 module.exports = router;

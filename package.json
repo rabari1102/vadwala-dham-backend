@@ -6,7 +6,19 @@
   "scripts": {
     "start": "node api/index.js",
     "dev": "nodemon api/index.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "assets:live": "node src/scripts/download-live-site-assets.js"
+  },
+  "nodemonConfig": {
+    "watch": [
+      "api",
+      "src"
+    ],
+    "ext": "js,json",
+    "ignore": [
+      "node_modules"
+    ],
+    "delay": 500
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
